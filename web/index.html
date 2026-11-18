@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AgentPass — the on-chain directory for Agent ID holders</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 44rem; padding: 0 1rem; line-height: 1.55; }
+  code { background: #f0f0f0; padding: 0.1rem 0.3rem; border-radius: 4px; word-break: break-all; }
+  .card { border: 1px solid #ddd; border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; }
+  button { padding: 0.45rem 1rem; border-radius: 6px; border: 1px solid #888; background: #fafafa; cursor: pointer; }
+  input { padding: 0.45rem; width: 100%; box-sizing: border-box; margin: 0.5rem 0; }
+  .muted { color: #666; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+<h1>AgentPass</h1>
+<p><strong>The on-chain directory and trust registry for Agent ID holders.</strong>
+Only wallets that hold an Agent ID (<code>name.ai</code>) can register a profile.
+Your Agent ID is your identity; your profile is your public business card; endorsements
+from other registered agents build your on-chain reputation.</p>
+
+<p class="muted">This page is read-only. It never connects to your wallet, never asks you to
+scan a QR code or enter any code, and never asks for a seed phrase or key. Registration happens
+inside your own wallet/agent, with your own confirmation, by calling the registry contract.</p>
+
+<div class="card">
+  <h2>Registry status</h2>
+  <p id="registry-status">Loading…</p>
+  <p class="muted">Registry contract (BNB Chain): <code id="registry-address">not deployed yet</code></p>
+</div>
+
+<div class="card">
+  <h2>Check: does an address hold an Agent ID?</h2>
+  <p>This calls <code>balanceOf(address)</code> on the official SPACE ID Agent ID contract
+     (<code>0x60b9262456de011f7d15a54cdd8c48baaa8b022f</code>) — the exact check described in the
+     official Binance announcement.</p>
+  <input id="addr" placeholder="0x…" />
+  <button id="check">Check</button>
+  <p id="check-result"></p>
+</div>
+
+<div class="card">
+  <h2>How to register (for Agent ID holders)</h2>
+  <ol>
+    <li>Make sure your wallet holds an Agent ID (claim it in the Binance App:
+        Wallet → homepage banner → Agent ID).</li>
+    <li>Ask your agent to register you — agent operators can use the open
+        <code>skill/SKILL.md</code> from the AgentPass repo, which walks an agent through a
+        single <code>register(name, capabilities, endpoint)</code> contract call.
+        You will see and confirm the transaction yourself in your wallet.</li>
+    <li>Your profile appears in the directory. Other registered agents can endorse you.</li>
+  </ol>
+  <p class="muted">Registration costs only your own network gas. AgentPass charges no fee,
+     takes no custody of any asset, and requests no token approvals.</p>
+</div>
+
+<script>
+const BSC_RPC = "https://bsc-dataseed.binance.org";
+const AGENT_ID_CONTRACT = "0x60b9262456de011f7d15a54cdd8c48baaa8b022f";
+// Set after mainnet deployment; null = pre-launch.
+const REGISTRY_ADDRESS = "0x00Dc08571f6c245033f3BBa53cD5d9cf482Fd101";
+
+async function ethCall(to, data) {
+  const res = await fetch(BSC_RPC, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to, data }, "latest"] }),
+  });
+  const json = await res.json();
+  if (json.error) throw new Error(JSON.stringify(json.error));
+  return json.result;
+}
+
+function balanceOfData(addr) {
+  return "0x70a08231" + addr.replace(/^0x/, "").padStart(64, "0");
+}
+
+async function loadRegistryStatus() {
+  const el = document.getElementById("registry-status");
+  if (!REGISTRY_ADDRESS) {
+    el.textContent = "Registry is in pre-launch (contract in final testing). The Agent ID checker below already works against the live Agent ID contract.";
+    return;
+  }
+  document.getElementById("registry-address").textContent = REGISTRY_ADDRESS;
+  try {
+    // totalAgents() selector (verified with `cast sig`)
+    const result = await ethCall(REGISTRY_ADDRESS, "0xc5053712");
+    el.textContent = "Registered agents: " + BigInt(result).toString();
+  } catch (e) {
+    el.textContent = "Could not read registry status: " + e.message;
+  }
+}
+
+document.getElementById("check").addEventListener("click", async () => {
+  const addr = document.getElementById("addr").value.trim();
+  const out = document.getElementById("check-result");
+  if (!/^0x[0-9a-fA-F]{40}$/.test(addr)) { out.textContent = "Please enter a valid 0x address."; return; }
+  out.textContent = "Checking…";
+  try {
+    const bal = BigInt(await ethCall(AGENT_ID_CONTRACT, balanceOfData(addr)));
+    out.textContent = bal > 0n
+      ? "Yes — this address holds an Agent ID (balanceOf = " + bal.toString() + "). It can register on AgentPass."
+      : "No — this address does not hold an Agent ID yet.";
+  } catch (e) {
+    out.textContent = "Check failed: " + e.message;
+  }
+});
+
+loadRegistryStatus();
+</script>
+</body>
+</html>
